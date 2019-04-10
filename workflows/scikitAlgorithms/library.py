@@ -1,4 +1,8 @@
 import re
+from sklearn.metrics import precision_score, recall_score, accuracy_score, f1_score
+import numpy as np
+from sklearn import pipeline
+from sklearn.preprocessing import Normalizer
 
 
 #
@@ -47,7 +51,13 @@ def scikitAlgorithms_kNearestNeighbors(input_dict):
 
 def scikitAlgorithms_logiscticRegression(input_dict):
     from sklearn.linear_model import LogisticRegression
-    clf = LogisticRegression(penalty=str(input_dict["penIn"]), C=float(input_dict["cIn"]))
+    try:
+        label, weight = str(input_dict["weight"]).split(':')
+        label = int(label.strip())
+        weight = int(weight.strip())
+        clf = LogisticRegression(penalty=str(input_dict["penIn"]), C=float(input_dict["cIn"]), class_weight={label:weight})
+    except:
+        clf = LogisticRegression(penalty=str(input_dict["penIn"]), C=float(input_dict["cIn"]))
     output_dict={}
     output_dict['LRout'] = clf
     return output_dict
@@ -226,26 +236,40 @@ def scikitAlgorithms_crossValidation(input_dict):
     n_sample = data["data"]
     n_feature = data["target"]
     seed = input_dict['seed']
-    scorer = input_dict['scorer']
     folds = int(input_dict['folds'])
     seed = int(seed) if len(seed) > 0 else None
-
-    if scorer != 'accuracy':
-        target_value_set = set(n_feature)
-        if len(target_value_set) > 2:
+    #print(len(n_sample), len(n_feature))
+    try:
+        feature_union = data["featureUnion"]
+        clf = pipeline.Pipeline([
+            ('union', feature_union),
+            ('scale', Normalizer()),
+            ('clf', clf)])
+    except:
+        pass
+    
+    scorer = input_dict['scorer']
+    
+    target_value_set = list(set(n_feature))
+    if len(target_value_set) > 2:
+        if scorer != 'accuracy':
             scorer = scorer + '_micro'
+        n_feature = [target_value_set.index(x) for x in n_feature]
+    else:
+        #always take minority class
+        count_first = n_feature.count(target_value_set[0])
+        count_second = n_feature.count(target_value_set[1])
+        if count_first > count_second:
+            n_feature = [1 if x == target_value_set[1] else 0 for x in n_feature]
         else:
-            n_feature = [1 if x == n_feature[0] else 0 for x in n_feature]
+            n_feature = [1 if x == target_value_set[0] else 0 for x in n_feature]
 
-    kfold = model_selection.KFold(n_splits=folds, random_state=seed)
+
+    kfold = model_selection.KFold(n_splits=folds, random_state=seed, shuffle=True)
     results = model_selection.cross_val_score(clf, n_sample, n_feature, cv=kfold, scoring=scorer)
 
-    output_dict = {'results': results}
+    output_dict = {'results': (scorer, results)}
     return output_dict
-
-
-
-
 
 
 #     dataset = input_dict["data"]
